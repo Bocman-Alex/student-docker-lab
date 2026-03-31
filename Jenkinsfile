@@ -72,7 +72,7 @@ pipeline {
                 sh """
                     docker stop student-app-dev || true
                     docker rm student-app-dev || true
-                    docker run -d --name student-app-dev -p 8081:80 ${DOCKER_IMAGE_NGINX}
+                    docker run -d --name student-app-dev -p 8082:80 ${DOCKER_IMAGE_NGINX}
                 """
             }
         }
