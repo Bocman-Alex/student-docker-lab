@@ -9,7 +9,7 @@ pipeline {
 
     environment {
         DOCKER_REGISTRY = 'docker.io'
-        DOCKER_USER = 'botsman01'   // замените на ваш логин
+        DOCKER_USER = 'botsman01'
         DOCKER_IMAGE_API = "${DOCKER_REGISTRY}/${DOCKER_USER}/student-app-api:${BUILD_NUMBER}"
         DOCKER_IMAGE_NGINX = "${DOCKER_REGISTRY}/${DOCKER_USER}/student-app-nginx:${BUILD_NUMBER}"
     }
@@ -48,7 +48,13 @@ pipeline {
         stage('Push to Registry') {
             steps {
                 script {
-                    docker.withRegistry("https://${DOCKER_REGISTRY}", 'docker-hub-credentials') {
+                    echo "=== DEBUG: Starting push ==="
+                    echo "Registry: ${DOCKER_REGISTRY}"
+                    echo "Image API: ${DOCKER_IMAGE_API}"
+                    echo "Image Nginx: ${DOCKER_IMAGE_NGINX}"
+                    echo "Credentials ID: docker-hub-credentials"
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh "docker login -u ${DOCKER_USER} -p ${DOCKER_PASS} ${DOCKER_REGISTRY}"
                         docker.image("${DOCKER_IMAGE_API}").push()
                         docker.image("${DOCKER_IMAGE_NGINX}").push()
                         docker.image("${DOCKER_IMAGE_API}").push("latest")
