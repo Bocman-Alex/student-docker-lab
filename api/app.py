@@ -1,10 +1,13 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.sql import text
+from prometheus_flask_exporter import PrometheusMetrics
 import redis
 import os
 import socket
 import datetime
 import json
+from celery import Celery
 
 app = Flask(__name__)
 
@@ -17,6 +20,9 @@ redis_client = redis.Redis.from_url(
     os.environ.get('REDIS_URL', 'redis://localhost:6379/0'),
     decode_responses=True
 )
+
+# Prometheus метрики
+metrics = PrometheusMetrics(app)
 
 class Visit(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -37,6 +43,30 @@ class Visit(db.Model):
 # Создание таблиц при старте
 with app.app_context():
     db.create_all()
+
+# ---------- Celery ----------
+def make_celery(app):
+    celery = Celery(
+        app.import_name,
+        broker=os.environ.get('RABBITMQ_URL', 'amqp://guest:guest@localhost:5672//'),
+        backend=os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+    )
+    celery.conf.update(app.config)
+    return celery
+
+celery = make_celery(app)
+
+@celery.task
+def sample_task():
+    """Пример задачи для демонстрации работы очереди"""
+    return "Task executed"
+
+@app.route('/celery-test')
+def celery_test():
+    """Тестовый эндпоинт для запуска задачи"""
+    result = sample_task.delay()
+    return jsonify({'task_id': result.id, 'status': 'queued'})
+# -----------------------------
 
 @app.route('/')
 def home():
@@ -70,7 +100,7 @@ def home():
 def health():
     status = {'status': 'healthy', 'timestamp': datetime.datetime.now().isoformat(), 'services': {}}
     try:
-        db.session.execute('SELECT 1')
+        db.session.execute(text('SELECT 1'))
         status['services']['postgresql'] = 'ok'
     except Exception as e:
         status['services']['postgresql'] = f'error: {str(e)}'
