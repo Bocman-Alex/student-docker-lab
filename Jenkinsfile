@@ -67,16 +67,15 @@ pipeline {
         }
 
         stage('Deploy to Staging') {
-            when { expression { params.ENVIRONMENT == 'staging' } }
-            steps {
-                sh """
-                    cd ${env.WORKSPACE}
-                    docker compose down
-                    docker compose up -d
-                """
-            }
-        }
-
+    when { expression { params.ENVIRONMENT == 'staging' } }
+    steps {
+        sh """
+            cd '${env.WORKSPACE}'
+            docker compose down --remove-orphans
+            docker compose up -d
+        """
+    }
+}
         stage('Approve Production') {
             when { expression { params.ENVIRONMENT == 'production' } }
             input {
@@ -86,17 +85,18 @@ pipeline {
             steps { echo "Production deployment approved" }
         }
 
-        stage('Deploy to Production') {
-            when { expression { params.ENVIRONMENT == 'production' } }
-            steps {
-                sh """
-                    cd ${env.WORKSPACE}
-                    docker compose down
-                    docker compose up -d
-                """
-            }
-        }
-
+       stage('Deploy to Production') {
+    when { expression { params.ENVIRONMENT == 'production' } }
+    steps {
+        sh """
+            cd '${env.WORKSPACE}'
+            docker compose down --remove-orphans
+            docker stop lab-redis lab-postgres lab-api lab-nginx lab-rabbitmq lab-celery lab-elasticsearch lab-kibana lab-prometheus lab-grafana || true
+            docker rm lab-redis lab-postgres lab-api lab-nginx lab-rabbitmq lab-celery lab-elasticsearch lab-kibana lab-prometheus lab-grafana || true
+            docker compose up -d
+        """
+    }
+}
         // ========== НОВЫЙ ЭТАП: СОЗДАНИЕ GIT-ТЕГА ==========
         stage('Tag Release') {
             when { expression { params.ENVIRONMENT == 'production' } }
