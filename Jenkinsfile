@@ -9,22 +9,18 @@ pipeline {
 
     environment {
         DOCKER_REGISTRY = 'docker.io'
-        DOCKER_USER = 'botsman01'
+        DOCKER_USER = 'botsman01'               // замените на ваш Docker Hub username
         DOCKER_IMAGE_API = "${DOCKER_REGISTRY}/${DOCKER_USER}/student-app-api:${BUILD_NUMBER}"
         DOCKER_IMAGE_NGINX = "${DOCKER_REGISTRY}/${DOCKER_USER}/student-app-nginx:${BUILD_NUMBER}"
     }
 
     stages {
         stage('Checkout') {
-            steps {
-                checkout scm
-            }
+            steps { checkout scm }
         }
 
         stage('Unit Tests') {
-            when {
-                expression { params.RUN_TESTS }
-            }
+            when { expression { params.RUN_TESTS } }
             steps {
                 sh '''
                     cd api
@@ -48,11 +44,6 @@ pipeline {
         stage('Push to Registry') {
             steps {
                 script {
-                    echo "=== DEBUG: Starting push ==="
-                    echo "Registry: ${DOCKER_REGISTRY}"
-                    echo "Image API: ${DOCKER_IMAGE_API}"
-                    echo "Image Nginx: ${DOCKER_IMAGE_NGINX}"
-                    echo "Credentials ID: docker-hub-credentials"
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         sh "docker login -u ${DOCKER_USER} -p ${DOCKER_PASS} ${DOCKER_REGISTRY}"
                         docker.image("${DOCKER_IMAGE_API}").push()
@@ -65,25 +56,21 @@ pipeline {
         }
 
         stage('Deploy to Dev') {
-            when {
-                expression { params.ENVIRONMENT == 'dev' }
-            }
+            when { expression { params.ENVIRONMENT == 'dev' } }
             steps {
                 sh """
                     docker stop student-app-dev || true
                     docker rm student-app-dev || true
-                    docker run -d --name student-app-dev ${DOCKER_IMAGE_NGINX}
+                    docker run -d --name student-app-dev -p 8081:80 ${DOCKER_IMAGE_NGINX}
                 """
             }
         }
 
         stage('Deploy to Staging') {
-            when {
-                expression { params.ENVIRONMENT == 'staging' }
-            }
+            when { expression { params.ENVIRONMENT == 'staging' } }
             steps {
                 sh """
-                    cd ~/docker-lab-compose
+                    cd ${env.WORKSPACE}
                     docker compose down
                     docker compose up -d
                 """
@@ -91,38 +78,41 @@ pipeline {
         }
 
         stage('Approve Production') {
-            when {
-                expression { params.ENVIRONMENT == 'production' }
-            }
+            when { expression { params.ENVIRONMENT == 'production' } }
             input {
                 message "Deploy to production?"
                 ok "Yes"
             }
-            steps {
-                echo "Production deployment approved"
-            }
+            steps { echo "Production deployment approved" }
         }
 
         stage('Deploy to Production') {
-            when {
-                expression { params.ENVIRONMENT == 'production' }
-            }
+            when { expression { params.ENVIRONMENT == 'production' } }
             steps {
                 sh """
-                    cd ~/docker-lab-compose
+                    cd ${env.WORKSPACE}
                     docker compose down
                     docker compose up -d
                 """
             }
         }
+
+        // ========== НОВЫЙ ЭТАП: СОЗДАНИЕ GIT-ТЕГА ==========
+        stage('Tag Release') {
+            when { expression { params.ENVIRONMENT == 'production' } }
+            steps {
+                script {
+                    sh """
+                        git tag "release-${BUILD_NUMBER}"
+                        git push origin "release-${BUILD_NUMBER}"
+                    """
+                }
+            }
+        }
     }
 
     post {
-        success {
-            echo 'Pipeline succeeded'
-        }
-        failure {
-            echo 'Pipeline failed'
-        }
+        success { echo 'Pipeline succeeded' }
+        failure { echo 'Pipeline failed' }
     }
 }
