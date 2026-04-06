@@ -98,18 +98,19 @@ pipeline {
     }
 }
         // ========== НОВЫЙ ЭТАП: СОЗДАНИЕ GIT-ТЕГА ==========
-        stage('Tag Release') {
+             stage('Tag Release') {
             when { expression { params.ENVIRONMENT == 'production' } }
             steps {
                 script {
-                    sh """
-                        git tag "release-${BUILD_NUMBER}"
-                        git push origin "release-${BUILD_NUMBER}"
-                    """
+                    withCredentials([gitUsernamePassword(credentialsId: 'github-credentials', gitToolName: 'Default')]) {
+                        sh """
+                            git tag "release-${BUILD_NUMBER}"
+                            git push origin "release-${BUILD_NUMBER}"
+                        """
+                    }
                 }
             }
         }
-    }
 
     post {
         success { echo 'Pipeline succeeded' }
