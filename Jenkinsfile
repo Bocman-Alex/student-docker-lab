@@ -9,7 +9,7 @@ pipeline {
 
     environment {
         DOCKER_REGISTRY = 'docker.io'
-        DOCKER_USER = 'botsman01'               // замените на ваш Docker Hub username
+        DOCKER_USER = 'botsman01'
         DOCKER_IMAGE_API = "${DOCKER_REGISTRY}/${DOCKER_USER}/student-app-api:${BUILD_NUMBER}"
         DOCKER_IMAGE_NGINX = "${DOCKER_REGISTRY}/${DOCKER_USER}/student-app-nginx:${BUILD_NUMBER}"
     }
@@ -67,15 +67,16 @@ pipeline {
         }
 
         stage('Deploy to Staging') {
-    when { expression { params.ENVIRONMENT == 'staging' } }
-    steps {
-        sh """
-            cd '${env.WORKSPACE}'
-            docker compose down --remove-orphans
-            docker compose up -d
-        """
-    }
-}
+            when { expression { params.ENVIRONMENT == 'staging' } }
+            steps {
+                sh """
+                    cd '${env.WORKSPACE}'
+                    docker compose down --remove-orphans
+                    docker compose up -d
+                """
+            }
+        }
+
         stage('Approve Production') {
             when { expression { params.ENVIRONMENT == 'production' } }
             input {
@@ -85,20 +86,20 @@ pipeline {
             steps { echo "Production deployment approved" }
         }
 
-       stage('Deploy to Production') {
-    when { expression { params.ENVIRONMENT == 'production' } }
-    steps {
-        sh """
-            cd '${env.WORKSPACE}'
-            docker compose down --remove-orphans
-            docker stop lab-redis lab-postgres lab-api lab-nginx lab-rabbitmq lab-celery lab-elasticsearch lab-kibana lab-prometheus lab-grafana || true
-            docker rm lab-redis lab-postgres lab-api lab-nginx lab-rabbitmq lab-celery lab-elasticsearch lab-kibana lab-prometheus lab-grafana || true
-            docker compose up -d
-        """
-    }
-}
-        // ========== НОВЫЙ ЭТАП: СОЗДАНИЕ GIT-ТЕГА ==========
-             stage('Tag Release') {
+        stage('Deploy to Production') {
+            when { expression { params.ENVIRONMENT == 'production' } }
+            steps {
+                sh """
+                    cd '${env.WORKSPACE}'
+                    docker compose down --remove-orphans
+                    docker stop lab-redis lab-postgres lab-api lab-nginx lab-rabbitmq lab-celery lab-elasticsearch lab-kibana lab-prometheus lab-grafana || true
+                    docker rm lab-redis lab-postgres lab-api lab-nginx lab-rabbitmq lab-celery lab-elasticsearch lab-kibana lab-prometheus lab-grafana || true
+                    docker compose up -d
+                """
+            }
+        }
+
+        stage('Tag Release') {
             when { expression { params.ENVIRONMENT == 'production' } }
             steps {
                 script {
@@ -111,6 +112,7 @@ pipeline {
                 }
             }
         }
+    }
 
     post {
         success { echo 'Pipeline succeeded' }
