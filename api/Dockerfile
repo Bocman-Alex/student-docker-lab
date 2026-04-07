@@ -1,22 +1,15 @@
 FROM python:3.9-slim
 
-# Устанавливаем curl для healthcheck
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Копируем зависимости и устанавливаем их
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копируем код приложения
 COPY app.py .
 
-# Создаём непривилегированного пользователя
-RUN useradd --create-home --shell /bin/bash appuser && \
-    chown -R appuser:appuser /app
-
-# Переключаемся на appuser
+RUN useradd --create-home --shell /bin/bash appuser && chown -R appuser:appuser /app
 USER appuser
 
 ENV PYTHONUNBUFFERED=1

@@ -1,5 +1,3 @@
-version: '3.8'
-
 networks:
   frontend:
   backend:
@@ -9,6 +7,7 @@ volumes:
   redis_data:
   prometheus_data:
   grafana_data:
+  elasticsearch_data:
 
 services:
   postgres:
@@ -44,6 +43,24 @@ services:
       timeout: 5s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: lab-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   api:
     build: ./api
     container_name: lab-api
@@ -51,12 +68,17 @@ services:
     environment:
       DATABASE_URL: postgresql://appuser:apppass@postgres:5432/appdb
       REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672//
     ports:
       - "5000:5000"
+    volumes:
+      - ./api:/app
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - frontend
@@ -66,6 +88,26 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  celery:
+    build: ./api
+    image: botsman01/student-app-celery:latest
+    container_name: lab-celery
+    restart: unless-stopped
+    command: celery -A app.celery worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://appuser:apppass@postgres:5432/appdb
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672//
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
 
   nginx:
     build: ./nginx
@@ -120,3 +162,32 @@ services:
       - backend
     profiles:
       - monitoring
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: lab-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - backend
+    profiles:
+      - logging
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: lab-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - backend
+    profiles:
+      - logging
