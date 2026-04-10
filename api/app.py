@@ -89,7 +89,7 @@ def home():
         'service': 'API Service',
         'hostname': socket.gethostname(),
         'timestamp': datetime.datetime.now().isoformat(),
-        'message': 'Welcome to the Docker Compose Demo!',
+        'message': ' text312',
         'stats': {
             'total_visits': redis_client.get('visits:total') or 0,
             'db_visits': Visit.query.count()
@@ -145,3 +145,5 @@ def set_cache(key):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+# TEST HOT RELOAD
+# test webhook

@@ -1,5 +1,3 @@
-version: '3.8'
-
 networks:
   frontend:
   backend:
@@ -9,11 +7,12 @@ volumes:
   redis_data:
   prometheus_data:
   grafana_data:
+  elasticsearch_data:
 
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: lab-postgres
+    container_name: dockerlab-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: appuser
@@ -31,7 +30,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: lab-redis
+    container_name: dockerlab-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
@@ -44,20 +43,42 @@ services:
       timeout: 5s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: dockerlab-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   api:
     build: ./api
-    image: yourdockerhub/student-app-api:latest
-    container_name: lab-api
+    container_name: dockerlab-api
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://appuser:apppass@postgres:5432/appdb
       REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672//
     ports:
       - "5000:5000"
+    volumes:
+      - ./api:/app
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - frontend
@@ -68,10 +89,29 @@ services:
       timeout: 10s
       retries: 3
 
+  celery:
+    build: ./api
+    image: botsman01/student-app-celery:latest
+    container_name: dockerlab-celery
+    restart: unless-stopped
+    command: celery -A app.celery worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://appuser:apppass@postgres:5432/appdb
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672//
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+
   nginx:
     build: ./nginx
-    image: yourdockerhub/student-app-nginx:latest
-    container_name: lab-nginx
+    container_name: dockerlab-nginx
     restart: unless-stopped
     ports:
       - "80:80"
@@ -90,7 +130,7 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-    container_name: lab-prometheus
+    container_name: dockerlab-prometheus
     restart: unless-stopped
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
@@ -107,7 +147,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    container_name: lab-grafana
+    container_name: dockerlab-grafana
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: admin
@@ -122,3 +162,32 @@ services:
       - backend
     profiles:
       - monitoring
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: dockerlab-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - backend
+    profiles:
+      - logging
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: dockerlab-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - backend
+    profiles:
+      - logging

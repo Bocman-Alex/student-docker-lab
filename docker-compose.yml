@@ -12,7 +12,7 @@ volumes:
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: lab-postgres
+    container_name: dockerlab-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: appuser
@@ -30,11 +30,13 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: lab-redis
+    container_name: dockerlab-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
+    ports:
+      - "6379:6379"
     networks:
       - backend
     healthcheck:
@@ -45,14 +47,12 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    container_name: lab-rabbitmq
+    container_name: dockerlab-rabbitmq
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
-    ports:
-      - "5672:5672"
-      - "15672:15672"
+    
     networks:
       - backend
     healthcheck:
@@ -63,14 +63,14 @@ services:
 
   api:
     build: ./api
-    container_name: lab-api
+    container_name: dockerlab-api
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://appuser:apppass@postgres:5432/appdb
       REDIS_URL: redis://redis:6379/0
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672//
     ports:
-      - "5000:5000"
+      - "5001:5000"
     volumes:
       - ./api:/app
     depends_on:
@@ -92,7 +92,7 @@ services:
   celery:
     build: ./api
     image: botsman01/student-app-celery:latest
-    container_name: lab-celery
+    container_name: dockerlab-celery
     restart: unless-stopped
     command: celery -A app.celery worker --loglevel=info
     environment:
@@ -111,10 +111,10 @@ services:
 
   nginx:
     build: ./nginx
-    container_name: lab-nginx
+    container_name: dockerlab-nginx
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8085:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./frontend:/usr/share/nginx/html:ro
@@ -130,7 +130,7 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-    container_name: lab-prometheus
+    container_name: dockerlab-prometheus
     restart: unless-stopped
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
@@ -139,7 +139,7 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
     ports:
-      - "9090:9090"
+      - "9091:9090"
     networks:
       - backend
     profiles:
@@ -147,7 +147,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    container_name: lab-grafana
+    container_name: dockerlab-grafana
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: admin
@@ -155,7 +155,7 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
     ports:
-      - "3000:3000"
+      - "3001:3000"
     depends_on:
       - prometheus
     networks:
@@ -165,10 +165,12 @@ services:
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    container_name: lab-elasticsearch
+    container_name: dockerlab-elasticsearch
+    restart: unless-stopped
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms256m -Xmx256m"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
@@ -177,10 +179,9 @@ services:
       - backend
     profiles:
       - logging
-
   kibana:
     image: docker.elastic.co/kibana/kibana:8.11.0
-    container_name: lab-kibana
+    container_name: dockerlab-kibana
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     ports:

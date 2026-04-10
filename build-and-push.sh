@@ -2,7 +2,7 @@
 set -e
 
 REGISTRY="docker.io"
-NAMESPACE="botsman01"          # ЗАМЕНИТЕ НА ВАШ Docker Hub USERNAME
+NAMESPACE="botsman01"          
 IMAGE_NAME="student-app-api"
 VERSION=${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo "v0.0.0")}
 
